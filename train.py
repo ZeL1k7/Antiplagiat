@@ -4,6 +4,7 @@ import numpy as np
 from nltk.tokenize import WordPunctTokenizer
 from gensim.models import Word2Vec
 import gensim
+from torch.utils.data import Dataset
 
 
 class Preprocessor:
@@ -84,4 +85,43 @@ class Word2VecVectorizer:
         for word in text:
             text_vector.append(self.get_vector(word))
         text_vector = np.array(text_vector)
-        return self._pooler(text_vector, axis = 0)
+        return self._pooler(text_vector, axis=0)
+
+
+class TripletDataset(Dataset):
+    def __init__(self, paths: List[Path], data: List[List[str]], vectorizer: Callable):
+        super().__init__()
+        self._paths = paths
+        self._vectorizer = vectorizer
+        self._data = data
+
+    def __len__(self):
+        return len(self._paths)
+
+    def __getitem__(self, idx):
+        anchor_path = self._paths[idx]
+        anchor_folder = anchor_path.split('/')[1]
+        anchor_filename = anchor_path.split('/')[-1]
+
+        positive_paths = []
+        for path in self._paths:
+            folder, filename = path.split('/')[1], path.split('/')[-1]
+            if folder != anchor_folder and filename == anchor_filename:
+                positive_paths.append(path)
+        positive_path = np.random.choice(positive_paths)
+        positive_idx = self._paths.index(positive_path)
+
+        negative_path = np.random.choice(self._paths)
+        while negative_path.split('/')[-1] == anchor_filename:
+            negative_path = np.random.choice(self._paths)
+        negative_idx = self._paths.index(negative_path)
+
+        anchor = self._data[idx]
+        positive = self._data[positive_idx]
+        negative = self._data[negative_idx]
+
+        anchor = self._vectorizer.get_text_vector(anchor)
+        positive = self._vectorizer.get_text_vector(positive)
+        negative = self._vectorizer.get_text_vector(negative)
+
+        return anchor, positive, negative
