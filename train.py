@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import List, Callable
-import pandas as pd
 import numpy as np
 from nltk.tokenize import WordPunctTokenizer
+from gensim.models import Word2Vec
+import gensim
 
 
 class Preprocessor:
@@ -48,35 +49,39 @@ class Preprocessor:
         return [self._preprocess(text) for text in texts]
 
 
-class FeatureCreator:
-    def __init__(self, distances: Callable = None, embeddings: List[int, Callable] = None):
+class Word2VecVectorizer:
+    def __init__(self, pooler: Callable = np.mean):
         """
-        Creates features from texts
+
         Args:
-            distances: measuring the distance between texts
-            embeddings: shape of embedding and way to generate it
+            pooler:
         """
-        self._distances = distances
-        self._embeddings = embeddings
+        self._word2vec = Word2Vec(
+            min_count=1,
+            window=5,
+            vector_size=300,
+            negative=10,
+            alpha=0.03,
+            min_alpha=0.0007,
+            sample=6e-5,
+            sg=1,
+            workers=4)
+        self._vectorizer = None
+        self._pooler = pooler
 
-    def _make_features(self, texts: List[List[str]]) -> pd.DataFrame:
-        _features = np.array([])
-        """
-        Args:
-            texts:
+    def train(self, vocab_data, train_data, save_model: bool = True):
+        self._word2vec.build_vocab(vocab_data)
+        self._word2vec.train(train_data, total_examples=self._word2vec.corpus_count, epochs=1, report_delay=1)
+        if save_model:
+            self._word2vec.save("word2vec.model")
+            self._vectorizer = gensim.models.Word2Vec.load("word2vec.model").wv
 
-        Returns:
-            DataFrame with features
-        """
-        if self._distances:
-            features = np.empty([len(texts), len(texts)])
-            for text_1 in texts:
-                for text_2 in texts:
-                    features[texts.index(text_1), texts.index(text_2)] = self._distances(text_1, text_2)
-            _features = np.concatenate([_features, features])
+    def get_vector(self, word: str) -> np.array:
+        return self._vectorizer.get_vector(word)
 
-        if self._embeddings:
-            features = np.empty([len(texts)])
-            _features = np.concatenate([_features, features])
-            pass
-
+    def get_text_vector(self, text: List[str]) -> np.array:
+        text_vector = []
+        for word in text:
+            text_vector.append(self.get_vector(word))
+        text_vector = np.array(text_vector)
+        return self._pooler(text_vector, axis = 0)
