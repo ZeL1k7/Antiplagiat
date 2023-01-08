@@ -144,7 +144,7 @@ if __name__ == "__main__":
     preprocessor = Preprocessor(True)
     paths = []
     for dirs in [args.files, args.plagiat1, args.plagiat2]:
-        for root, _, files in os.walk(dirs, topdown=False):
+        for root, _, files in os.walk(os.path.join('data', dirs), topdown=False):
             for name in files:
                 paths.append(os.path.join(root, name))
     clean_data = preprocessor.preprocess(paths)
@@ -161,9 +161,9 @@ if __name__ == "__main__":
     criterion = nn.TripletMarginWithDistanceLoss(
         distance_function=lambda x, y: 1.0 - F.cosine_similarity(x, y),
         margin=1.0)
-
+    print('network started training')
     for epoch in tqdm(range(300)):
-        for anchor, positive, negative in tqdm(dataloader):
+        for anchor, positive, negative in dataloader:
             optimizer.zero_grad()
 
             anchor = anchor.to(DEVICE)
