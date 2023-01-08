@@ -161,7 +161,7 @@ if __name__ == "__main__":
     criterion = nn.TripletMarginWithDistanceLoss(
         distance_function=lambda x, y: 1.0 - F.cosine_similarity(x, y),
         margin=1.0)
-    print('network started training')
+
     for epoch in tqdm(range(300)):
         for anchor, positive, negative in dataloader:
             optimizer.zero_grad()
