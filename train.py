@@ -9,6 +9,7 @@ import gensim
 from torch.utils.data import Dataset, DataLoader
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from tqdm.notebook import tqdm
 
 
@@ -132,7 +133,9 @@ if __name__ == "__main__":
         nn.Linear(250, 150)
     ).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters())
-    criterion = nn.TripletMarginLoss(margin=1.0, p=2)
+    criterion = nn.TripletMarginWithDistanceLoss(
+        distance_function=lambda x, y: 1.0 - F.cosine_similarity(x, y),
+        margin=1.0)
 
     for epoch in tqdm(range(300)):
         for anchor, positive, negative in tqdm(dataloader):
