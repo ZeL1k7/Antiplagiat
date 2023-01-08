@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 from typing import List, Callable
 import os
@@ -42,7 +43,7 @@ class Pooler(Enum):
 
 
 class Word2VecVectorizer:
-    def __init__(self, pooler: Callable = np.mean):
+    def __init__(self, pooler: Callable = np.mean, load_model: bool = False):
         self._word2vec = Word2Vec(
             min_count=1,
             window=5,
@@ -53,7 +54,10 @@ class Word2VecVectorizer:
             sample=6e-5,
             sg=1,
             workers=4)
-        self._vectorizer = None
+        if load_model:
+            self._vectorizer = gensim.models.Word2Vec.load('word2vec.model').wv
+        else:
+            self._vectorizer = None
         self._pooler = pooler
 
     def train(self, vocab_data, train_data, save_model: bool = True):
@@ -113,12 +117,33 @@ class TripletDataset(Dataset):
         return anchor, positive, negative
 
 
+class TripletModel(nn.Module):
+    def __init__(self, in_channels: int = 300, out_channels: int = 150):
+        super().__init__()
+        self._model = nn.Sequential(
+            nn.Linear(in_channels, in_channels - (in_channels // 6)),
+            nn.Linear(in_channels - (in_channels // 6), out_channels)
+        )
+
+    def forward(self, X):
+        return self._model(X)
+
+
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description='Antiplagiat')
+    parser.add_argument('files', type=str, help='original files')
+    parser.add_argument('plagiat1', type=str, help='plagiat1 files')
+    parser.add_argument('plagiat2', type=str, help='plagiat2 files')
+    parser.add_argument('--model', type=str, help='path for saving model')
+    args = parser.parse_args()
+
     preprocessor = Preprocessor(True)
     paths = []
-    for root, dirs, files in os.walk('data', topdown=False):
-        for name in files:
-            paths.append(os.path.join(root, name))
+    for dirs in [args.files, args.plagiat1, args.plagiat2]:
+        for root, _, files in os.walk(dirs, topdown=False):
+            for name in files:
+                paths.append(os.path.join(root, name))
     clean_data = preprocessor.preprocess(paths)
 
     w2v = Word2VecVectorizer(Pooler.MEAN)
@@ -128,10 +153,7 @@ if __name__ == "__main__":
     dataloader = DataLoader(dataset, batch_size=1)
 
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = nn.Sequential(
-        nn.Linear(300, 250),
-        nn.Linear(250, 150)
-    ).to(DEVICE)
+    model = TripletModel().to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters())
     criterion = nn.TripletMarginWithDistanceLoss(
         distance_function=lambda x, y: 1.0 - F.cosine_similarity(x, y),
@@ -173,4 +195,4 @@ if __name__ == "__main__":
                     'loss': loss,
                 }, 'checkpoint.pkl')
 
-    torch.save(model, 'model.pkl')
+    torch.save(model, args.model)
