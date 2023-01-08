@@ -56,8 +56,10 @@ class Word2VecVectorizer:
             workers=4)
         if load_model:
             self._vectorizer = gensim.models.Word2Vec.load('word2vec.model').wv
+            self.vocab = self._vectorizer.key_to_index
         else:
             self._vectorizer = None
+            self.vocab = None
         self._pooler = pooler
 
     def train(self, vocab_data, train_data, save_model: bool = True):
@@ -66,6 +68,7 @@ class Word2VecVectorizer:
         if save_model:
             self._word2vec.save('word2vec.model')
             self._vectorizer = gensim.models.Word2Vec.load('word2vec.model').wv
+            self.vocab = self._vectorizer.key_to_index
 
     def get_vector(self, word: str) -> np.array:
         return self._vectorizer.get_vector(word)
