@@ -57,10 +57,10 @@ class Word2VecVectorizer:
 
     def train(self, vocab_data, train_data, save_model: bool = True):
         self._word2vec.build_vocab(vocab_data)
-        self._word2vec.train(train_data, total_examples=self._word2vec.corpus_count, epochs=1, report_delay=1)
+        self._word2vec.train(train_data, total_examples=self._word2vec.corpus_count, epochs=300, report_delay=1)
         if save_model:
-            self._word2vec.save("word2vec.model")
-            self._vectorizer = gensim.models.Word2Vec.load("word2vec.model").wv
+            self._word2vec.save('word2vec.model')
+            self._vectorizer = gensim.models.Word2Vec.load('word2vec.model').wv
 
     def get_vector(self, word: str) -> np.array:
         return self._vectorizer.get_vector(word)
@@ -115,7 +115,7 @@ class TripletDataset(Dataset):
 if __name__ == "__main__":
     preprocessor = Preprocessor(True)
     paths = []
-    for root, dirs, files in os.walk("data", topdown=False):
+    for root, dirs, files in os.walk('data', topdown=False):
         for name in files:
             paths.append(os.path.join(root, name))
     clean_data = preprocessor.preprocess(paths)
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters())
     criterion = nn.TripletMarginLoss(margin=1.0, p=2)
 
-    for epoch in tqdm(range(2)):
+    for epoch in tqdm(range(300)):
         for anchor, positive, negative in tqdm(dataloader):
             optimizer.zero_grad()
 
@@ -159,3 +159,13 @@ if __name__ == "__main__":
             loss.backward()
 
             optimizer.step()
+
+            if epoch % 5 == 0:
+                torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': loss,
+                }, 'checkpoint.pkl')
+
+    torch.save(model, 'model.pkl')
