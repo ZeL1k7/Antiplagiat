@@ -57,7 +57,7 @@ class Word2VecVectorizer:
 
     def train(self, vocab_data, train_data, save_model: bool = True):
         self._word2vec.build_vocab(vocab_data)
-        self._word2vec.train(train_data, total_examples=self._word2vec.corpus_count, epochs=300, report_delay=1)
+        self._word2vec.train(train_data, total_examples=self._word2vec.corpus_count, epochs=300)
         if save_model:
             self._word2vec.save('word2vec.model')
             self._vectorizer = gensim.models.Word2Vec.load('word2vec.model').wv
@@ -88,12 +88,12 @@ class TripletDataset(Dataset):
         anchor_folder = anchor_path.split('/')[1]
         anchor_filename = anchor_path.split('/')[-1]
 
-        positive_paths = []
+        positive_path = []
         for path in self._paths:
             folder, filename = path.split('/')[1], path.split('/')[-1]
             if folder != anchor_folder and filename == anchor_filename:
-                positive_paths.append(path)
-        positive_path = np.random.choice(positive_paths)
+                positive_path.append(path)
+        positive_path = np.random.choice(positive_path)
         positive_idx = self._paths.index(positive_path)
 
         negative_path = np.random.choice(self._paths)
@@ -142,7 +142,9 @@ if __name__ == "__main__":
             positive = positive.to(DEVICE)
             negative = negative.to(DEVICE)
 
-            if anchor.shape != positive.shape or anchor.shape != negative.shape or positive.shape != negative.shape:
+            if anchor.shape != positive.shape or \
+                anchor.shape != negative.shape or \
+                    positive.shape != negative.shape:
                 vector_shape = max(anchor.shape, positive.shape, negative.shape)
                 if anchor.shape != vector_shape:
                     anchor = torch.zeros(vector_shape, requires_grad=True).to(DEVICE)
