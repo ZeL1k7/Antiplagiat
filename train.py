@@ -1,32 +1,24 @@
 from pathlib import Path
 from typing import List, Callable
+import os
+from enum import Enum
 import numpy as np
 from nltk.tokenize import WordPunctTokenizer
 from gensim.models import Word2Vec
 import gensim
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+import torch
+import torch.nn as nn
+from tqdm.notebook import tqdm
 
 
 class Preprocessor:
 
     def __init__(self, do_tokenize: bool = True):
-        """
-
-        Args:
-            do_tokenize:
-        """
         self._do_tokenize = do_tokenize
         self._tokenizer = WordPunctTokenizer()
 
     def _preprocess(self, text: List[str]) -> List[str]:
-        """
-
-        Args:
-            text:
-
-        Returns:
-
-        """
         text = text.lower()
         tokens = text.split(' ')
         if self._do_tokenize:
@@ -34,14 +26,6 @@ class Preprocessor:
         return tokens
 
     def preprocess(self, filepaths: List[Path]) -> List[str]:
-        """
-
-        Args:
-            filepaths:
-
-        Returns:
-
-        """
         texts = []
         for filepath in filepaths:
             with open(filepath, 'r+') as file:
@@ -50,13 +34,14 @@ class Preprocessor:
         return [self._preprocess(text) for text in texts]
 
 
+class Pooler(Enum):
+    MIN = np.min
+    MEAN = np.mean
+    MAX = np.max
+
+
 class Word2VecVectorizer:
     def __init__(self, pooler: Callable = np.mean):
-        """
-
-        Args:
-            pooler:
-        """
         self._word2vec = Word2Vec(
             min_count=1,
             window=5,
@@ -125,3 +110,52 @@ class TripletDataset(Dataset):
         negative = self._vectorizer.get_text_vector(negative)
 
         return anchor, positive, negative
+
+
+if __name__ == "__main__":
+    preprocessor = Preprocessor(True)
+    paths = []
+    for root, dirs, files in os.walk("data", topdown=False):
+        for name in files:
+            paths.append(os.path.join(root, name))
+    clean_data = preprocessor.preprocess(paths)
+
+    w2v = Word2VecVectorizer(Pooler.MEAN)
+    w2v.train(clean_data, clean_data)
+
+    dataset = TripletDataset(paths, clean_data, w2v)
+    dataloader = DataLoader(dataset, batch_size=1)
+
+    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = nn.Sequential(
+        nn.Linear(300, 250),
+        nn.Linear(250, 150)
+    ).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters())
+    criterion = nn.TripletMarginLoss(margin=1.0, p=2)
+
+    for epoch in tqdm(range(2)):
+        for anchor, positive, negative in tqdm(dataloader):
+            optimizer.zero_grad()
+
+            anchor = anchor.to(DEVICE)
+            positive = positive.to(DEVICE)
+            negative = negative.to(DEVICE)
+
+            if anchor.shape != positive.shape or anchor.shape != negative.shape or positive.shape != negative.shape:
+                vector_shape = max(anchor.shape, positive.shape, negative.shape)
+                if anchor.shape != vector_shape:
+                    anchor = torch.zeros(vector_shape, requires_grad=True).to(DEVICE)
+                if positive.shape != vector_shape:
+                    positive = torch.zeros(vector_shape, requires_grad=True).to(DEVICE)
+                if negative.shape != vector_shape:
+                    negative = torch.zeros(vector_shape, requires_grad=True).to(DEVICE)
+
+            anchor = model.forward(anchor)
+            positive = model.forward(positive)
+            negative = model.forward(negative)
+
+            loss = criterion(anchor, positive, negative)
+            loss.backward()
+
+            optimizer.step()
